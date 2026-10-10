@@ -475,9 +475,7 @@ function HeaderPins() {
             overflow: "hidden",
             zIndex: 49,
             pointerEvents: "none",
-            WebkitAppRegion: "no-drag",
-            appRegion: "no-drag",
-          } as CSSProperties}
+          }}
         >
           {pinned.length === 0 ? (
             <span
@@ -501,6 +499,8 @@ function HeaderPins() {
                   className="header-pins-chip"
                   style={{
                     pointerEvents: "auto",
+                    WebkitAppRegion: "no-drag",
+                    appRegion: "no-drag",
                     display: "inline-flex",
                     alignItems: "center",
                     flex: "none",
@@ -510,7 +510,7 @@ function HeaderPins() {
                     background: active
                       ? "var(--state-active, rgba(128,128,128,0.18))"
                       : "transparent",
-                  }}
+                  } as CSSProperties}
                 >
                   <a
                     className="header-pins-link"
