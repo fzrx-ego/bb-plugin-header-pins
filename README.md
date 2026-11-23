@@ -1,6 +1,6 @@
 # Header Pins
 
-BB plugin that shows your pinned threads as chips in the empty title bar strip of the BB window.
+BB plugin that shows your pinned threads as tabs in each thread header, in place of the title and its adjacent actions menu.
 
 - Click a chip to open the thread; the open thread's chip is highlighted.
 - A dot shows the most urgent state across the thread and its children: yellow waits for you, blue works, green finished unread.
@@ -11,7 +11,7 @@ See [PLUGIN_OVERVIEW.md](PLUGIN_OVERVIEW.md) for the full description.
 
 ## Requirements
 
-BB 0.46 or later, desktop app (tested on macOS). No account, keys or network access.
+BB 0.50.1 or later with Plugin SDK 0.6.157 or later. No account, keys or network access.
 
 ## Development
 
@@ -22,7 +22,11 @@ bb plugin build .
 bb plugin install .
 ```
 
-The chips are an `experimental_appOverlay` positioned over `[data-testid="app-window-title-bar"]`. That selector, and the Chat Sidebar row markup used for colors (`[data-chat-row]`, `.chat-stripe`), are not public API: check them after a BB update.
+The tabs use `experimental_threadHeaderTitle`, including in split panes. A lifecycle-managed content script expands the title slot and hides the adjacent actions menu only while Header Pins is rendered. Other header controls stay available. When tabs overflow, scroll horizontally. Thread actions remain available from the sidebar context menu.
+
+Project stripes use the full project list and Chat Sidebar's saved color picks, with its MIT-licensed color resolver in `vendor/`. They do not depend on which thread rows are visible.
+
+The shell layout selector `[data-testid="app-page-header-content-row"]` and Chat Sidebar's `chat-sidebar/project-colors` storage key and color resolver are private integration contracts: check them after an update. The sidebar row selector `[data-chat-row]` is used only to reveal a thread after navigation.
 
 ## License
 

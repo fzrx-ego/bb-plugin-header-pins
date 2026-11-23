@@ -1,68 +1,18 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   definePluginApp,
   experimental_useSidebarThreads,
-  useBbContext,
   useBbNavigate,
   useSdk,
   experimental_Icon as Icon,
   type PluginSidebarThread,
+  type PluginSidebarProject,
+  type ExperimentalThreadHeaderTitleProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import { assignProjectColors, colorForKey, isColorId, swatch, type ColorId } from "./vendor/chat-sidebar-colors";
 
-const TITLE_BAR = '[data-testid="app-window-title-bar"]';
-const OVERLAY_ATTR = "data-header-pins";
-const PLUGIN_OVERLAYS = "[data-bb-plugin-app-overlays]";
-const CONTROLS = 'button, a, [role="button"], [role="link"], input';
-
-type Band = {
-  key: string;
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-};
-
-function measureBands(): Band[] {
-  const bar = document.querySelector<HTMLElement>(TITLE_BAR);
-  if (!bar) return [];
-  const rect = bar.getBoundingClientRect();
-  if (rect.width < 80 || rect.height < 8) return [];
-  const center = rect.left + rect.width / 2;
-  let left = rect.left;
-  let right = rect.right - 12;
-  let middle = rect.top + rect.height / 2;
-  const controls = [
-    ...Array.from(bar.querySelectorAll<HTMLElement>(CONTROLS)),
-    ...Array.from(document.querySelectorAll<HTMLElement>(`${PLUGIN_OVERLAYS} :is(${CONTROLS})`)),
-  ];
-  controls.forEach((control) => {
-    if (control.closest(`[${OVERLAY_ATTR}]`)) return;
-    const box = control.getBoundingClientRect();
-    if (box.width === 0 || box.bottom <= rect.top || box.top >= rect.bottom) return;
-    if (box.right <= center) {
-      if (box.right > left) middle = box.top + box.height / 2;
-      left = Math.max(left, box.right);
-    } else right = Math.min(right, box.left);
-  });
-  left += 16;
-  right -= 16;
-  const width = right - left;
-  if (width < 72) return [];
-  const top = Math.round(middle - rect.height / 2);
-  return [{ key: "title-bar", top, left, width, height: rect.height }];
-}
-
-function sameBands(a: readonly Band[], b: readonly Band[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every(
-    (band, index) =>
-      band.left === b[index]?.left &&
-      band.top === b[index]?.top &&
-      band.width === b[index]?.width &&
-      band.height === b[index]?.height,
-  );
-}
+const PINS_ATTR = "data-header-pins";
 
 // Watches a few elements instead of the whole window. Chat streaming changes
 // the DOM many times a second; that only costs a throttled check that the
@@ -120,52 +70,8 @@ function useElementWatch(
   }, deps);
 }
 
-function findTitleBarParts(): Element[] {
-  return [document.querySelector(TITLE_BAR), document.querySelector(PLUGIN_OVERLAYS)].filter(
-    (element): element is Element => element !== null,
-  );
-}
-
-const BAR_WATCH: MutationObserverInit = {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ["class", "style", "hidden"],
-};
-
-function useHeaderBands(): readonly Band[] {
-  const [bands, setBands] = useState<readonly Band[]>([]);
-  useElementWatch(
-    findTitleBarParts,
-    BAR_WATCH,
-    () => {
-      const next = measureBands();
-      setBands((current) => (sameBands(current, next) ? current : next));
-    },
-    [],
-  );
-  return bands;
-}
-
 const SIDEBAR_ROW = "[data-chat-row]";
-const STRIPE = ".chat-stripe";
-const AVATAR = 'span[aria-hidden="true"]';
-const FIRST_COLOR = /(rgba?|hsla?|oklch|oklab|color)\([^)]*\)/;
-
-// Chat Sidebar paints the project colour as a bar on the row (some builds)
-// or as a gradient avatar (the published 0.2.x). Take the bar's colour, or
-// the avatar gradient's first stop.
-function rowColor(row: Element): string | null {
-  const stripe = row.querySelector<HTMLElement>(STRIPE);
-  if (stripe) return getComputedStyle(stripe).backgroundColor || null;
-  for (const span of Array.from(row.querySelectorAll<HTMLElement>(AVATAR)).slice(0, 4)) {
-    const image = getComputedStyle(span).backgroundImage;
-    if (!image.includes("gradient")) continue;
-    return FIRST_COLOR.exec(image)?.[0] ?? null;
-  }
-  return null;
-}
-const COLORS_KEY = "header-pins:stripe-colors";
+const PROJECT_PICKS_KEY = "chat-sidebar/project-colors";
 
 // Lane rules mirror Chat Sidebar (lib/status.ts), so the dot matches the sidebar row.
 type Lane = "attention" | "working" | "done";
@@ -176,7 +82,6 @@ const WORKING_INDICATORS = new Set<string>([
   "workflow",
   "background-agent",
   "background-command",
-  "goal",
   "plan-mode",
   "queued-waiting",
   "working-draft",
@@ -196,7 +101,7 @@ function laneOf(thread: PluginSidebarThread): Lane | null {
     BUSY_STATUSES.has(thread.runtimeStatus) ||
     BUSY_STATUSES.has(thread.status) ||
     WORKING_INDICATORS.has(thread.indicator) ||
-    activity.workflows + activity.backgroundAgents + activity.backgroundCommands + activity.goals > 0
+    activity.workflows + activity.backgroundAgents + activity.backgroundCommands + activity.planMode > 0
   ) {
     return "working";
   }
@@ -284,21 +189,36 @@ function writeStored(key: string, value: string) {
   }
 }
 
-function readColors(): Colors {
+type ProjectPicks = Readonly<Record<string, ColorId>>;
+
+function readProjectPicks(): ProjectPicks {
   try {
-    const raw = localStorage.getItem(COLORS_KEY);
+    const raw = localStorage.getItem(PROJECT_PICKS_KEY);
     const value: unknown = raw === null ? null : JSON.parse(raw);
-    return value !== null && typeof value === "object" ? (value as Colors) : {};
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, ColorId] => isColorId(entry[1])));
   } catch {
+    // The sidebar also uses automatic project colors when picks aren't stored.
     return {};
   }
 }
 
-// Chat Sidebar keeps project colours to itself, so the chip copies the colour
-// its row is painted with and remembers it for when the row is not mounted.
-function useStripeColors(ids: readonly string[]): { colors: Colors; chatSidebar: boolean } {
-  const [colors, setColors] = useState<Colors>(readColors);
+function samePicks(a: ProjectPicks, b: ProjectPicks): boolean {
+  return Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((id) => a[id] === b[id]);
+}
+
+// Resolve colors from the complete project list, just as Chat Sidebar does.
+// Visible rows cannot be the color source: filters and virtualization unmount them.
+function useStripeColors(
+  pins: readonly PluginSidebarThread[],
+  projects: readonly PluginSidebarProject[],
+): { colors: Colors; chatSidebar: boolean } {
+  const [picks, setPicks] = useState<ProjectPicks>(readProjectPicks);
   const [chatSidebar, setChatSidebar] = useState(readListMode);
+  const refreshPicks = () => {
+    const next = readProjectPicks();
+    setPicks((current) => samePicks(current, next) ? current : next);
+  };
   useElementWatch(
     findThreadLists,
     LIST_WATCH,
@@ -308,23 +228,27 @@ function useStripeColors(ids: readonly string[]): { colors: Colors; chatSidebar:
         if (next !== current) writeStored(LIST_MODE_KEY, next ? "1" : "0");
         return next;
       });
-      setColors((current) => {
-        const next: Record<string, string> = {};
-        let changed = Object.keys(current).some((id) => !ids.includes(id));
-        for (const id of ids) {
-          const row = document.querySelector(`${SIDEBAR_ROW}[data-chat-row="${CSS.escape(id)}"]`);
-          const color = (row && rowColor(row)) ?? current[id];
-          if (!color) continue;
-          next[id] = color;
-          if (color !== current[id]) changed = true;
-        }
-        if (!changed) return current;
-        writeStored(COLORS_KEY, JSON.stringify(next));
-        return next;
-      });
+      refreshPicks();
     },
-    [ids.join(",")],
+    [],
   );
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === PROJECT_PICKS_KEY) refreshPicks();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+  const colors = useMemo(() => {
+    const assigned = assignProjectColors(projects.map((project) => project.id), picks);
+    const knownProjects = new Set(projects.map((project) => project.id));
+    return Object.fromEntries(pins.map((thread) => [
+      thread.id,
+      swatch(knownProjects.has(thread.projectId)
+        ? assigned.get(thread.projectId)!
+        : colorForKey(thread.id)),
+    ]));
+  }, [pins, projects, picks]);
   return { colors, chatSidebar };
 }
 
@@ -433,10 +357,9 @@ const CHIP_CSS = `
 .header-pins-chip:not(:has([aria-current="page"])):hover { background: var(--state-hover, rgba(128,128,128,0.1)); }
 `;
 
-function HeaderPins() {
-  const bands = useHeaderBands();
-  const { threads } = experimental_useSidebarThreads();
-  const { threadId } = useBbContext();
+export function HeaderPins({ threadId }: ExperimentalThreadHeaderTitleProps) {
+  const strip = useRef<HTMLDivElement>(null);
+  const { threads, projects } = experimental_useSidebarThreads();
   const navigate = useBbNavigate();
   const sdk = useSdk();
   const unpin = (id: string) => {
@@ -451,129 +374,156 @@ function HeaderPins() {
     [threads],
   );
   const pinnedIds = useMemo(() => pinned.map((thread) => thread.id), [pinned]);
-  const { colors, chatSidebar } = useStripeColors(pinnedIds);
+  const { colors, chatSidebar } = useStripeColors(pinned, projects);
   const lanes = useMemo(() => treeLanes(threads, new Set(pinnedIds)), [threads, pinnedIds]);
 
-  if (bands.length === 0) return null;
+  useLayoutEffect(() => {
+    strip.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [threadId, pinnedIds]);
 
   return (
     <>
       <style>{CHIP_CSS}</style>
-      {bands.map((band) => (
-        <div
-          key={band.key}
-          {...{ [OVERLAY_ATTR]: "" }}
-          style={{
-            position: "fixed",
-            top: band.top,
-            left: band.left,
-            width: band.width,
-            height: band.height,
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            overflow: "hidden",
-            zIndex: 49,
-            pointerEvents: "none",
-          }}
-        >
-          {pinned.length === 0 ? (
-            <span
-              style={{
-                pointerEvents: "none",
-                fontSize: 12,
-                color: "var(--muted-foreground, currentColor)",
-                opacity: 0.7,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {TEXT.empty}
-            </span>
-          ) : (
-            pinned.map((thread) => {
-              const active = thread.id === threadId;
-              const lane = lanes.get(thread.id) ?? null;
-              return (
-                <span
-                  key={thread.id}
-                  className="header-pins-chip"
+      <div
+        ref={strip}
+        role="navigation"
+        aria-label={RU ? "Закреплённые треды" : "Pinned threads"}
+        {...{ [PINS_ATTR]: "" }}
+        style={{
+          width: "100%",
+          minWidth: 0,
+          height: 28,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          overflowX: "auto",
+          overflowY: "hidden",
+          scrollbarWidth: "none",
+        }}
+      >
+        {pinned.length === 0 ? (
+          <span
+            style={{
+              pointerEvents: "none",
+              fontSize: 12,
+              color: "var(--muted-foreground, currentColor)",
+              opacity: 0.7,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {TEXT.empty}
+          </span>
+        ) : (
+          pinned.map((thread) => {
+            const active = thread.id === threadId;
+            const lane = lanes.get(thread.id) ?? null;
+            return (
+              <span
+                key={thread.id}
+                className="header-pins-chip"
+                style={{
+                  pointerEvents: "auto",
+                  WebkitAppRegion: "no-drag",
+                  appRegion: "no-drag",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  flex: "none",
+                  maxWidth: 200,
+                  height: 28,
+                  borderRadius: 6,
+                  background: active
+                    ? "var(--state-active, rgba(128,128,128,0.18))"
+                    : "transparent",
+                } as CSSProperties}
+              >
+                <a
+                  className="header-pins-link"
+                  href={thread.href}
+                  title={thread.displayTitle}
+                  aria-current={active ? "page" : undefined}
+                  onClick={(event) => {
+                    if (
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey ||
+                      event.button !== 0
+                    ) {
+                      return;
+                    }
+                    event.preventDefault();
+                    navigate.toThread(thread.id);
+                    revealInSidebar(thread.id);
+                  }}
                   style={{
-                    pointerEvents: "auto",
-                    WebkitAppRegion: "no-drag",
-                    appRegion: "no-drag",
                     display: "inline-flex",
                     alignItems: "center",
-                    flex: "none",
-                    maxWidth: 200,
-                    height: 28,
-                    borderRadius: 6,
-                    background: active
-                      ? "var(--state-active, rgba(128,128,128,0.18))"
-                      : "transparent",
-                  } as CSSProperties}
+                    gap: 6,
+                    minWidth: 0,
+                    height: "100%",
+                    padding: "0 8px",
+                    fontSize: 12,
+                    lineHeight: "16px",
+                    whiteSpace: "nowrap",
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
                 >
-                  <a
-                    className="header-pins-link"
-                    href={thread.href}
-                    title={thread.displayTitle}
-                    aria-current={active ? "page" : undefined}
-                    onClick={(event) => {
-                      if (
-                        event.metaKey ||
-                        event.ctrlKey ||
-                        event.shiftKey ||
-                        event.altKey ||
-                        event.button !== 0
-                      ) {
-                        return;
-                      }
-                      event.preventDefault();
-                      navigate.toThread(thread.id);
-                      revealInSidebar(thread.id);
-                    }}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      minWidth: 0,
-                      height: "100%",
-                      padding: "0 8px",
-                      fontSize: 12,
-                      lineHeight: "16px",
-                      whiteSpace: "nowrap",
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
-                  >
-                    <Stripe
-                      color={chatSidebar ? colors[thread.id] : PROVIDER_COLORS[thread.providerId]}
-                      lane={lane}
-                    />
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {thread.displayTitle}
-                    </span>
-                  </a>
-                  <button
-                    type="button"
-                    className="header-pins-unpin"
-                    title={TEXT.unpin}
-                    aria-label={TEXT.unpinLabel(thread.displayTitle)}
-                    onClick={() => unpin(thread.id)}
-                  >
-                    <Icon name="PinOff" className="size-3" />
-                  </button>
-                </span>
-              );
-            })
-          )}
-        </div>
-      ))}
+                  <Stripe
+                    color={chatSidebar ? colors[thread.id] : PROVIDER_COLORS[thread.providerId]}
+                    lane={lane}
+                  />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {thread.displayTitle}
+                  </span>
+                </a>
+                <button
+                  type="button"
+                  className="header-pins-unpin"
+                  title={TEXT.unpin}
+                  aria-label={TEXT.unpinLabel(thread.displayTitle)}
+                  onClick={() => unpin(thread.id)}
+                >
+                  <Icon name="PinOff" className="size-3" />
+                </button>
+              </span>
+            );
+          })
+        )}
+      </div>
     </>
   );
 }
 
+// The title slot replaces the text. Scoped shell styles let it fill the title
+// area and hide the adjacent actions menu while our tabs are present.
+export const HEADER_LAYOUT_CSS = `
+[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins]),
+[data-testid="app-page-header-content-row"] > div:first-child > div > div:has([data-header-pins]) {
+  flex: 1;
+  min-width: 0;
+}
+[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins]) > span {
+  display: none;
+}
+.header-pins-chip:focus-within .header-pins-unpin { display: inline-flex; }
+`;
+
 export default definePluginApp((app) => {
-  app.slots.experimental_appOverlay({
+  app.contentScripts.register({
+    id: "header-pins-layout",
+    mount() {
+      const style = document.createElement("style");
+      style.dataset.headerPinsLayout = "";
+      style.textContent = HEADER_LAYOUT_CSS;
+      document.head.append(style);
+      return () => style.remove();
+    },
+  });
+  app.slots.experimental_threadHeaderTitle({
     id: "header-pins",
     component: HeaderPins,
   });
