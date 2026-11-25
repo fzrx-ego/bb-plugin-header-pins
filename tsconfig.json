@@ -19,6 +19,7 @@
     "server.ts",
     "app.tsx",
     "shared.ts",
-    "current-pill.tsx"
+    "current-pill.tsx",
+    "capsule-settings.tsx"
   ]
 }

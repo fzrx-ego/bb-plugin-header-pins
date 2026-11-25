@@ -9,6 +9,7 @@ import {
   type ExperimentalThreadHeaderTitleProps,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import { CapsuleSettingsSection } from "./capsule-settings";
 import { CurrentThreadPill } from "./current-pill";
 import {
   LANE_COLORS,
@@ -295,6 +296,14 @@ export default definePluginApp((app) => {
   app.slots.experimental_threadHeaderTitle({
     id: "header-pins",
     component: HeaderPins,
+  });
+  app.slots.settingsSection({
+    id: "capsule",
+    title: RU ? "Капсула открытого треда" : "Open thread capsule",
+    description: RU
+      ? "Что показывать в плавающей капсуле над лентой"
+      : "What the floating capsule over the conversation shows",
+    component: CapsuleSettingsSection,
   });
   app.slots.experimental_threadHeaderRow({
     id: "current-thread",

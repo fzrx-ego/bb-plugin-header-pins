@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   experimental_Icon as Icon,
   experimental_ProviderIcon as ProviderIcon,
@@ -6,12 +6,15 @@ import {
   experimental_ThreadActionsMenu as ThreadActionsMenu,
   experimental_useProviders,
   experimental_useSidebarThreads,
+  experimental_useThreadActionRegistrations,
+  experimental_useThreadActions,
   useSdk,
   type ExperimentalThreadHeaderRowProps,
   type PluginSidebarThread,
   type PluginThreadActionTarget,
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
+import { MENU_KEY, PIN_KEY, useCapsuleSettings } from "./capsule-settings";
 import { LANE_COLORS, PROVIDER_COLORS, RU, laneOf, treeLanes, useStripeColors, type Lane } from "./shared";
 
 const TEXT = RU
@@ -200,13 +203,88 @@ const PILL_CSS = `
   background: var(--state-hover, rgba(128,128,128,0.15));
   color: var(--foreground, currentColor);
 }
+.header-pins-current-btn:disabled { opacity: 0.4; cursor: default; background: transparent; }
 .header-pins-current-btn[aria-pressed="true"] { color: var(--foreground, currentColor); }
 `;
 
+// The right capsule: chosen thread actions in menu order, then pin and the
+// thread menu. Without anything to show it takes no room.
+function ActionsCapsule({ thread, target }: { thread: PluginSidebarThread; target: PluginThreadActionTarget }) {
+  const settings = useCapsuleSettings();
+  const sdk = useSdk();
+  const registrations = experimental_useThreadActionRegistrations();
+  const keys = useMemo(() => {
+    const chosen = new Set(settings.buttons);
+    return registrations.map((registration) => registration.key).filter((key) => chosen.has(key));
+  }, [registrations, settings.buttons]);
+  const entries = experimental_useThreadActions(target, { keys });
+  const showPin = settings.buttons.includes(PIN_KEY);
+  const showMenu = settings.buttons.includes(MENU_KEY);
+  const quick = entries.filter((entry) => entry.action.choices === undefined);
+  if (quick.length === 0 && !showPin && !showMenu) return null;
+
+  const togglePin = () => {
+    const request = thread.isPinned ? sdk.threads.unpin({ threadId: thread.id }) : sdk.threads.pin({ threadId: thread.id });
+    request.catch((cause: unknown) => {
+      toast.error(thread.isPinned ? TEXT.unpinFailed : TEXT.pinFailed, {
+        description: cause instanceof Error ? cause.message : String(cause),
+      });
+    });
+  };
+
+  return (
+    <div className="header-pins-current-glass header-pins-current-actions">
+      {quick.map((entry) => (
+        <button
+          key={entry.key}
+          type="button"
+          className="header-pins-current-btn"
+          title={entry.action.label}
+          aria-label={entry.action.label}
+          disabled={entry.action.disabled}
+          onClick={() => void entry.action.run()}
+        >
+          <Icon name={entry.action.icon} fallback="Circle" className="size-4" />
+        </button>
+      ))}
+      {showPin ? (
+        <button
+          type="button"
+          className="header-pins-current-btn"
+          title={thread.isPinned ? TEXT.unpin : TEXT.pin}
+          aria-label={thread.isPinned ? TEXT.unpin : TEXT.pin}
+          aria-pressed={thread.isPinned}
+          onClick={togglePin}
+        >
+          <Icon name={thread.isPinned ? "PinOff" : "Pin"} className="size-4" />
+        </button>
+      ) : null}
+      {showMenu ? (
+        <ThreadActionsMenu
+          thread={target}
+          align="end"
+          sideOffset={6}
+          trigger={(props) => (
+            <button
+              type="button"
+              {...props}
+              className="header-pins-current-btn"
+              title={TEXT.actions}
+              aria-label={TEXT.actions}
+            >
+              <Icon name="MoreHorizontal" className="size-4" />
+            </button>
+          )}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps) {
+  const settings = useCapsuleSettings();
   const { threads, projects } = experimental_useSidebarThreads();
   const { providers } = experimental_useProviders();
-  const sdk = useSdk();
   const now = useNow(30_000);
   const thread = useMemo(() => threads.find((candidate) => candidate.id === threadId), [threads, threadId]);
   const own = useMemo(() => (thread === undefined ? [] : [thread]), [thread]);
@@ -224,15 +302,30 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
   const dot = tree ?? status.lane;
   const branch = thread.environment?.branchName ?? null;
 
-  const togglePin = () => {
-    const request = thread.isPinned ? sdk.threads.unpin({ threadId: thread.id }) : sdk.threads.pin({ threadId: thread.id });
-    request.catch((cause: unknown) => {
-      toast.error(thread.isPinned ? TEXT.unpinFailed : TEXT.pinFailed, {
-        description: cause instanceof Error ? cause.message : String(cause),
-      });
-    });
-  };
   const target = actionTarget(thread);
+  const subtitle: { key: string; node: ReactNode }[] = [];
+  if (settings.project && project !== undefined) subtitle.push({ key: "project", node: <span>{project.name}</span> });
+  if (settings.branch && branch !== null) {
+    subtitle.push({
+      key: "branch",
+      node: (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+          <Icon name="GitBranch" style={{ width: 11, height: 11, flex: "none" }} aria-hidden />
+          {branch}
+        </span>
+      ),
+    });
+  }
+  if (settings.status) {
+    subtitle.push({
+      key: "status",
+      node: (
+        <span style={status.lane === null ? undefined : { color: LANE_COLORS[status.lane], fontWeight: 500 }}>
+          {status.text}
+        </span>
+      ),
+    });
+  }
 
   return (
     <div className="header-pins-current" role="region" aria-label={TEXT.label}>
@@ -252,53 +345,20 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
             </span>
             <span className="header-pins-current-text">
               <span className="header-pins-current-title">{thread.displayTitle}</span>
-              <span className="header-pins-current-sub">
-                {project === undefined ? null : <span>{project.name}</span>}
-                {branch === null ? null : (
-                  <>
-                    <span aria-hidden>·</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                      <Icon name="GitBranch" style={{ width: 11, height: 11, flex: "none" }} aria-hidden />
-                      {branch}
-                    </span>
-                  </>
-                )}
-                <span aria-hidden>·</span>
-                <span style={status.lane === null ? undefined : { color: LANE_COLORS[status.lane], fontWeight: 500 }}>
-                  {status.text}
+              {subtitle.length === 0 ? null : (
+                <span className="header-pins-current-sub">
+                  {subtitle.map((part, index) => (
+                    <Fragment key={part.key}>
+                      {index === 0 ? null : <span aria-hidden>·</span>}
+                      {part.node}
+                    </Fragment>
+                  ))}
                 </span>
-              </span>
+              )}
             </span>
           </div>
         </ThreadActionsContextMenu>
-        <div className="header-pins-current-glass header-pins-current-actions">
-          <button
-            type="button"
-            className="header-pins-current-btn"
-            title={thread.isPinned ? TEXT.unpin : TEXT.pin}
-            aria-label={thread.isPinned ? TEXT.unpin : TEXT.pin}
-            aria-pressed={thread.isPinned}
-            onClick={togglePin}
-          >
-            <Icon name={thread.isPinned ? "PinOff" : "Pin"} className="size-4" />
-          </button>
-          <ThreadActionsMenu
-            thread={target}
-            align="end"
-            sideOffset={6}
-            trigger={(props) => (
-              <button
-                type="button"
-                {...props}
-                className="header-pins-current-btn"
-                title={TEXT.actions}
-                aria-label={TEXT.actions}
-              >
-                <Icon name="MoreHorizontal" className="size-4" />
-              </button>
-            )}
-          />
-        </div>
+        <ActionsCapsule thread={thread} target={target} />
       </div>
     </div>
   );
