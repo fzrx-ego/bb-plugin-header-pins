@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-header-pins",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "bb": ">=0.50.1",
@@ -8,7 +8,7 @@
   },
   "bb": {
     "name": "Header Pins",
-    "description": "Switch between pinned threads from tabs in the thread header, with project colors and live status.",
+    "description": "Switch between pinned threads from tabs in the thread header, and see the open thread in a floating capsule with project color and live status.",
     "branding": {
       "icon": "Pin"
     },

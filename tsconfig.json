@@ -17,6 +17,8 @@
   },
   "include": [
     "server.ts",
-    "app.tsx"
+    "app.tsx",
+    "shared.ts",
+    "current-pill.tsx"
   ]
 }
