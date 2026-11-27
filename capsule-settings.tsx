@@ -11,6 +11,7 @@ export interface CapsuleSettings {
   /** Thread action keys (`<owner>/<id>`) shown as buttons, plus PIN_KEY and MENU_KEY. */
   buttons: readonly string[];
   project: boolean;
+  model: boolean;
   branch: boolean;
   status: boolean;
 }
@@ -23,9 +24,12 @@ const CORE_PIN_KEY = "bb--core/pin";
 export const DEFAULT_SETTINGS: CapsuleSettings = {
   buttons: ["chat-sidebar/new-subthread", "chat-sidebar/park", PIN_KEY, MENU_KEY],
   project: true,
+  model: true,
   branch: true,
   status: true,
 };
+
+type SubtitlePart = "project" | "model" | "branch" | "status";
 
 const STORAGE_KEY = "header-pins:capsule";
 const CHANGE_EVENT = "header-pins:capsule-change";
@@ -39,9 +43,9 @@ function parse(raw: string | null): CapsuleSettings {
     const buttons = Array.isArray(record.buttons)
       ? record.buttons.filter((key): key is string => typeof key === "string")
       : DEFAULT_SETTINGS.buttons;
-    const flag = (name: "project" | "branch" | "status") =>
+    const flag = (name: SubtitlePart) =>
       typeof record[name] === "boolean" ? (record[name] as boolean) : DEFAULT_SETTINGS[name];
-    return { buttons, project: flag("project"), branch: flag("branch"), status: flag("status") };
+    return { buttons, project: flag("project"), model: flag("model"), branch: flag("branch"), status: flag("status") };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -98,6 +102,7 @@ const TEXT = RU
       menuHint: "Остальные действия; правый клик по капсуле открывает то же меню",
       subtitle: "Вторая строка",
       project: "Проект",
+      model: "Модель и уровень reasoning",
       branch: "Ветка",
       status: "Статус треда",
       reset: "Вернуть по умолчанию",
@@ -110,6 +115,7 @@ const TEXT = RU
       menuHint: "Every other action; right-click the capsule for the same menu",
       subtitle: "Second line",
       project: "Project",
+      model: "Model and reasoning level",
       branch: "Branch",
       status: "Thread status",
       reset: "Restore defaults",
@@ -173,7 +179,7 @@ export function CapsuleSettingsSection() {
     const buttons = selected.has(key) ? settings.buttons.filter((item) => item !== key) : [...settings.buttons, key];
     write({ ...settings, buttons });
   };
-  const flag = (name: "project" | "branch" | "status") => write({ ...settings, [name]: !settings[name] });
+  const flag = (name: SubtitlePart) => write({ ...settings, [name]: !settings[name] });
 
   return (
     <div className="header-pins-settings">
@@ -191,6 +197,7 @@ export function CapsuleSettingsSection() {
         <h4>{TEXT.subtitle}</h4>
         <div className="header-pins-settings-list">
           <Row choice={{ key: "project", title: TEXT.project, icon: "Folder" }} checked={settings.project} onToggle={() => flag("project")} />
+          <Row choice={{ key: "model", title: TEXT.model, icon: "Sparkles" }} checked={settings.model} onToggle={() => flag("model")} />
           <Row choice={{ key: "branch", title: TEXT.branch, icon: "GitBranch" }} checked={settings.branch} onToggle={() => flag("branch")} />
           <Row choice={{ key: "status", title: TEXT.status, icon: "Circle" }} checked={settings.status} onToggle={() => flag("status")} />
         </div>

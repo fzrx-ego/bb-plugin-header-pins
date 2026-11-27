@@ -6,8 +6,8 @@ BB plugin that shows your pinned threads as tabs in each thread header, in place
 - A dot shows the most urgent state across the thread and its children: yellow waits for you, blue works, green finished unread.
 - A colored bar uses the thread's project color from [Chat Sidebar](https://github.com/seoperin/bb-plugin-chat-sidebar) by [Evgeniy Perin](https://github.com/seoperin) when it is installed, and the provider's color otherwise. We recommend using the two together.
 - Hover a chip to unpin it.
-- A floating capsule over the top of the conversation names the open thread, like a chat header in Telegram: provider icon on the project color, status dot, title, then project, branch and what the thread is doing or when it last changed. A second capsule holds quick buttons: by default New subthread and Mark finished from Chat Sidebar, pin or unpin, and the thread actions menu. Right-click the main capsule for the same menu.
-- Choose the capsule's buttons and its second line in Settings → Plugins → Header Pins: any thread menu action without a submenu, the pin button, the menu, and the project, branch and status parts. The choice is kept in this browser's storage.
+- A floating capsule over the top of the conversation names the open thread, like a chat header in Telegram: provider icon on the project color, status dot, title, then project, model with reasoning level as the composer writes it ("6.2-Sol High"), branch and what the thread is doing or when it last changed. A second capsule holds quick buttons: by default New subthread and Mark finished from Chat Sidebar, pin or unpin, and the thread actions menu. Right-click the main capsule for the same menu.
+- Choose the capsule's buttons and its second line in Settings → Plugins → Header Pins: any thread menu action without a submenu, the pin button, the menu, and the project, model, branch and status parts. The choice is kept in this browser's storage.
 
 See [PLUGIN_OVERVIEW.md](PLUGIN_OVERVIEW.md) for the full description.
 

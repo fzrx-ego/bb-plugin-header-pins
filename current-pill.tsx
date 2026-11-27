@@ -15,6 +15,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { MENU_KEY, PIN_KEY, useCapsuleSettings } from "./capsule-settings";
+import { useThreadModel } from "./thread-model";
 import { LANE_COLORS, PROVIDER_COLORS, RU, laneOf, treeLanes, useStripeColors, type Lane } from "./shared";
 
 const TEXT = RU
@@ -287,6 +288,7 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
   const { providers } = experimental_useProviders();
   const now = useNow(30_000);
   const thread = useMemo(() => threads.find((candidate) => candidate.id === threadId), [threads, threadId]);
+  const model = useThreadModel(thread, settings.model);
   const own = useMemo(() => (thread === undefined ? [] : [thread]), [thread]);
   const { colors, chatSidebar } = useStripeColors(own, threads, projects);
   const tree = useMemo(
@@ -305,6 +307,7 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
   const target = actionTarget(thread);
   const subtitle: { key: string; node: ReactNode }[] = [];
   if (settings.project && project !== undefined) subtitle.push({ key: "project", node: <span>{project.name}</span> });
+  if (settings.model && model !== null) subtitle.push({ key: "model", node: <span>{model}</span> });
   if (settings.branch && branch !== null) {
     subtitle.push({
       key: "branch",
