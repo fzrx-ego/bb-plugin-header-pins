@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-header-pins",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "engines": {
     "bb": ">=0.50.1",

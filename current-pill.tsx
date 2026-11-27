@@ -117,6 +117,10 @@ const PILL_CSS = `
   position: relative;
   z-index: 30;
 }
+/* The capsule covers the top 52px of the timeline. The start of the history
+   gets room for it, and anything scrolled into view stops below it. */
+[data-page-scroll-viewport]:has([data-timeline-row-list]) { scroll-padding-top: 60px; }
+[data-page-scroll-viewport] [data-timeline-row-list]:not(:is([data-timeline-row-list] *)) { padding-top: 44px; }
 .header-pins-current {
   position: relative;
   z-index: 20;

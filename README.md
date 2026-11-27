@@ -24,7 +24,7 @@ bb plugin build .
 bb plugin install .
 ```
 
-The tabs use `experimental_threadHeaderTitle`, including in split panes. The capsule uses `experimental_threadHeaderRow`: a zero-height row whose content floats over the timeline. Its stylesheet raises `[data-thread-header-rows]` above the timeline; check that selector after a BB update. A lifecycle-managed content script expands the title slot and hides the adjacent actions menu only while Header Pins is rendered. Other header controls stay available. When tabs overflow, scroll horizontally. Thread actions are in the floating capsule.
+The tabs use `experimental_threadHeaderTitle`, including in split panes. The capsule uses `experimental_threadHeaderRow`: a zero-height row whose content floats over the timeline. Its stylesheet raises `[data-thread-header-rows]` above the timeline and gives the outer `[data-timeline-row-list]` inside `[data-page-scroll-viewport]` room at the top, so the start of the thread is not under the capsule; check these selectors after a BB update. A lifecycle-managed content script expands the title slot and hides the adjacent actions menu only while Header Pins is rendered. Other header controls stay available. When tabs overflow, scroll horizontally. Thread actions are in the floating capsule.
 
 Project stripes and the capsule use Chat Sidebar's saved color picks and its MIT-licensed color resolver in `vendor/`, fed the same projects as Chat Sidebar: those with active threads, most recently used first, with sub-threads counted under their root. They do not depend on which thread rows are visible.
 
