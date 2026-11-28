@@ -1,4 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { useWindowHeaderPins } from "./window-header";
 import {
   definePluginApp,
   experimental_useSidebarThreads,
@@ -129,6 +131,8 @@ const CHIP_CSS = `
 
 export function HeaderPins({ threadId }: ExperimentalThreadHeaderTitleProps) {
   const strip = useRef<HTMLDivElement>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const windowHeader = useWindowHeaderPins(anchor);
   const { threads, projects } = experimental_useSidebarThreads();
   const navigate = useBbNavigate();
   const sdk = useSdk();
@@ -152,9 +156,9 @@ export function HeaderPins({ threadId }: ExperimentalThreadHeaderTitleProps) {
       block: "nearest",
       inline: "nearest",
     });
-  }, [threadId, pinnedIds]);
+  }, [threadId, pinnedIds, windowHeader]);
 
-  return (
+  const pins = (
     <>
       <style>{CHIP_CSS}</style>
       <div
@@ -266,17 +270,46 @@ export function HeaderPins({ threadId }: ExperimentalThreadHeaderTitleProps) {
       </div>
     </>
   );
+  return (
+    <span ref={anchor} data-header-pins-anchor="" style={{ display: "contents" }}>
+      {windowHeader === null ? pins : createPortal(pins, windowHeader)}
+    </span>
+  );
 }
 
 // The title slot replaces the text. Scoped shell styles let it fill the title
 // area and hide the adjacent actions menu while our tabs are present.
 export const HEADER_LAYOUT_CSS = `
-[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins]),
-[data-testid="app-page-header-content-row"] > div:first-child > div > div:has([data-header-pins]) {
+/* The window title bar owns the pins, independently of the sidebar width. */
+main[data-sidebar="inset"]:has([data-window-header-pins])::after { display: none; }
+[data-header-pins-window] {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+[data-header-pins-window]::before {
+  content: "";
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+[data-header-pins-window] > [data-header-pins] {
+  flex: 1;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins-anchor]),
+[data-testid="app-page-header-content-row"] > div:first-child > div > div:has([data-header-pins-anchor]) {
   flex: 1;
   min-width: 0;
 }
-[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins]) > span {
+[data-testid="app-page-header-content-row"] > div:first-child > div:has([data-header-pins-anchor]) > span {
   display: none;
 }
 .header-pins-chip:focus-within .header-pins-unpin { display: inline-flex; }

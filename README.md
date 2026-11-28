@@ -1,6 +1,6 @@
 # Header Pins
 
-BB plugin that shows your pinned threads as tabs in each thread header, in place of the title and its adjacent actions menu.
+BB plugin that shows your pinned threads as tabs beside the window menu on wide desktop windows, and in each thread header on compact and browser layouts. The thread title and its adjacent actions menu live in the floating capsule.
 
 - Click a chip to open the thread; the open thread's chip is highlighted.
 - A dot shows the most urgent state across the thread and its children: yellow waits for you, blue works, green finished unread.
@@ -24,11 +24,11 @@ bb plugin build .
 bb plugin install .
 ```
 
-The tabs use `experimental_threadHeaderTitle`, including in split panes. The capsule uses `experimental_threadHeaderRow`: a zero-height row whose content floats over the timeline. Its stylesheet raises `[data-thread-header-rows]` above the timeline and gives the outer `[data-timeline-row-list]` inside `[data-page-scroll-viewport]` room at the top, so the start of the thread is not under the capsule; check these selectors after a BB update. A lifecycle-managed content script expands the title slot and hides the adjacent actions menu only while Header Pins is rendered. Other header controls stay available. When tabs overflow, scroll horizontally. Thread actions are in the floating capsule.
+The tabs use `experimental_threadHeaderTitle`, including in split panes. On wide desktop windows, the first pane renders its tabs beside the window controls through a React portal, with a short separator before the tabs. The strip starts at the window controls independently of sidebar width; browser layouts, compact windows and other split panes keep their tabs in their title slots. The capsule uses `experimental_threadHeaderRow`: a zero-height row whose content floats over the timeline. Its stylesheet raises `[data-thread-header-rows]` above the timeline and gives the outer `[data-timeline-row-list]` inside `[data-page-scroll-viewport]` room at the top, so the start of the thread is not under the capsule; check these selectors after a BB update. A lifecycle-managed content script expands the title slot and hides the adjacent actions menu only while Header Pins is rendered. Other header controls stay available. When tabs overflow, scroll horizontally. Thread actions are in the floating capsule.
 
 Project stripes and the capsule use Chat Sidebar's saved color picks and its MIT-licensed color resolver in `vendor/`, fed the same projects as Chat Sidebar: those with active threads, most recently used first, with sub-threads counted under their root. They do not depend on which thread rows are visible.
 
-The shell layout selector `[data-testid="app-page-header-content-row"]` and Chat Sidebar's `chat-sidebar/project-colors` storage key and color resolver are private integration contracts: check them after an update. The sidebar row selector `[data-chat-row]` is used only to reveal a thread after navigation. The default capsule buttons name Chat Sidebar's thread action keys `chat-sidebar/new-subthread` and `chat-sidebar/park`; without them the capsule simply leaves those buttons out.
+The shell layout selectors `[data-testid="app-page-header-content-row"]`, `[data-testid="app-window-title-bar"]`, `[data-testid="app-layout-root"][data-framed]` and `main[data-sidebar="inset"]` and Chat Sidebar's `chat-sidebar/project-colors` storage key and color resolver are private integration contracts: check them after an update. The sidebar row selector `[data-chat-row]` is used only to reveal a thread after navigation. The default capsule buttons name Chat Sidebar's thread action keys `chat-sidebar/new-subthread` and `chat-sidebar/park`; without them the capsule simply leaves those buttons out.
 
 ## License
 

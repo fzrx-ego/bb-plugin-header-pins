@@ -4,7 +4,7 @@ People who keep several BB threads going at once and switch between the same few
 
 ## What you get
 
-Your pinned threads appear as tabs in each thread header, replacing the title and its adjacent actions menu. The tabs take no extra row from the conversation. Other header controls remain available; thread actions move to the floating capsule.
+On wide desktop windows, your pinned threads start beside the window menu, with a short separator before them. Their starting position stays fixed when you resize or collapse the sidebar. Compact windows, browsers and other split panes show the tabs in their thread headers. The tabs take no extra row from the conversation. Other header controls remain available; thread actions move to the floating capsule.
 
 - **One click to switch.** Click a chip to open its thread. The chip of the open thread is highlighted.
 - **Status at a glance.** A dot on each chip shows the most urgent state across the thread and its child threads: yellow when it waits for you, blue while it works, green when it finished and you have not opened it yet. No dot means nothing needs you.
