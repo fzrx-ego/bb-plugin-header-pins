@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { MENU_KEY, PIN_KEY, useCapsuleSettings } from "./capsule-settings";
 import { useThreadModel } from "./thread-model";
+import { useThreadUsage } from "./thread-usage";
 import { LANE_COLORS, PROVIDER_COLORS, RU, laneOf, treeLanes, useStripeColors, type Lane } from "./shared";
 
 const TEXT = RU
@@ -161,6 +162,15 @@ const PILL_CSS = `
   border-radius: 999px;
 }
 .header-pins-current-avatar svg, .header-pins-current-avatar img { width: 16px; height: 16px; }
+.header-pins-current-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  pointer-events: none;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+}
+.header-pins-current-dot { z-index: 1; }
 .header-pins-current-dot {
   position: absolute;
   right: -1px;
@@ -293,6 +303,7 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
   const now = useNow(30_000);
   const thread = useMemo(() => threads.find((candidate) => candidate.id === threadId), [threads, threadId]);
   const model = useThreadModel(thread, settings.model);
+  const usage = useThreadUsage(thread, threads, settings.usage, settings.perPercent);
   const own = useMemo(() => (thread === undefined ? [] : [thread]), [thread]);
   const { colors, chatSidebar } = useStripeColors(own, threads, projects);
   const tree = useMemo(
@@ -309,6 +320,15 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
   const branch = thread.environment?.branchName ?? null;
 
   const target = actionTarget(thread);
+  const arc =
+    usage === null
+      ? null
+      : usage.percent >= settings.usageAlert
+        ? "#dc2626"
+        : usage.percent >= settings.usageWarn
+          ? "#d97706"
+          : color;
+  const filled = usage === null ? 0 : Math.min(100, Math.max(usage.percent, 4));
   const subtitle: { key: string; node: ReactNode }[] = [];
   if (settings.project && project !== undefined) subtitle.push({ key: "project", node: <span>{project.name}</span> });
   if (settings.model && model !== null) subtitle.push({ key: "model", node: <span>{model}</span> });
@@ -344,9 +364,18 @@ export function CurrentThreadPill({ threadId }: ExperimentalThreadHeaderRowProps
               className="header-pins-current-avatar"
               style={{
                 background: `color-mix(in srgb, ${color} 22%, var(--background, #fff))`,
-                boxShadow: `inset 0 0 0 1.5px color-mix(in srgb, ${color} 55%, transparent)`,
+                boxShadow: arc === null ? `inset 0 0 0 1.5px color-mix(in srgb, ${color} 55%, transparent)` : undefined,
               } as CSSProperties}
             >
+              {arc === null ? null : (
+                <span
+                  className="header-pins-current-ring"
+                  style={{
+                    background: `conic-gradient(${arc} 0 ${filled}%, color-mix(in srgb, ${color} 30%, var(--background, #fff)) ${filled}% 100%)`,
+                  }}
+                  aria-hidden
+                />
+              )}
               <ProviderIcon providerKind="agent" provider={provider} aria-hidden />
               {dot === null ? null : <span className="header-pins-current-dot" style={{ background: LANE_COLORS[dot] }} />}
             </span>
