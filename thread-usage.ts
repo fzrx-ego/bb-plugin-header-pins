@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import { useRpc, useSdk, type PluginSidebarThread } from "@get-bb/plugin-sdk/app";
+import type { rpcContract } from "./rpc";
 
 // An estimate of how much of the provider's usage window the open thread
 // took: its tokens, weighted roughly by API prices so cache reads count for
 // little, divided by the tokens one percent of the window holds. Reads only
-// the open thread: its latest usage events and the provider's window.
+// the open thread: its provider's session logs through the server (Claude
+// Code with subagents, Codex), else bb's latest usage event, and the window.
 
 export type WindowKind = "session" | "week";
 
@@ -46,7 +48,8 @@ export const DEFAULT_PER_PERCENT: Readonly<Record<string, number>> = {
 const DAYS_PER_WEEK = 7;
 const REFRESH_MS = 15_000;
 const LIMITS_TTL_MS = 60_000;
-const CALIBRATION_KEY = "header-pins:usage-calibration";
+// v2: readings before 1.2.1 undercounted threads, so their refinements are dropped.
+const CALIBRATION_KEY = "header-pins:usage-calibration-v2";
 const CALIBRATION_EVENT = "header-pins:usage-calibration-change";
 
 function weigh(totals: Totals, providerId: string): number {
@@ -192,7 +195,23 @@ function calibrate(
   return entry;
 }
 
-async function readThreadTotals(sdk: Sdk, threadId: string, signal: AbortSignal): Promise<Totals[]> {
+type Rpc = ReturnType<typeof useRpc<typeof rpcContract>>;
+
+async function readThreadTotals(
+  sdk: Sdk,
+  rpc: Rpc,
+  threadId: string,
+  providerId: string,
+  signal: AbortSignal,
+): Promise<Totals[]> {
+  // bb's own event counts only since the provider process started and leaves
+  // subagents out; the session logs hold the whole thread.
+  try {
+    const logged = await rpc.call("thread_usage", { threadId, providerId });
+    if (logged !== null && logged.sessions.length > 0) return logged.sessions;
+  } catch {
+    // Without the server part, bb's event still gives a reading.
+  }
   const events = await sdk.threads.events.list({
     threadId,
     types: ["thread/tokenUsage/updated"],
@@ -220,6 +239,7 @@ export function useThreadUsage(
   manualPerPercent: Readonly<Record<string, number>>,
 ): ThreadUsage | null {
   const sdk = useSdk();
+  const rpc = useRpc<typeof rpcContract>();
   const [usage, setUsage] = useState<ThreadUsage | null>(null);
   const lastRun = useRef(0);
   const threadsRef = useRef(threads);
@@ -249,7 +269,7 @@ export function useThreadUsage(
       lastRun.current = Date.now();
       try {
         const [totals, reading] = await Promise.all([
-          readThreadTotals(sdk, threadId, controller.signal),
+          readThreadTotals(sdk, rpc, threadId, providerId, controller.signal),
           readWindow(sdk, providerId),
         ]);
         if (controller.signal.aborted) return;
@@ -287,7 +307,7 @@ export function useThreadUsage(
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [sdk, enabled, threadId, providerId, updatedAt, status, manual]);
+  }, [sdk, rpc, enabled, threadId, providerId, updatedAt, status, manual]);
 
   return usage;
 }
